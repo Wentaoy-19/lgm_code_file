@@ -83,7 +83,59 @@ def load_with_pretrain(config_path, weight_path):
 #     model = accelerate.dispatch_model(model,device_map = device_map,offload_dir = '/raid/projects/wentaoy4/model_cache',offload_buffers =False)
 #     return model
 
+def _single_gpu_train(dataloader, 
+          model,
+          device = torch.device("cuda:1"),
+          epochs = 5, 
+          lr = 5e-6, 
+          batch_size = 16, 
+          num_warmup_steps = 100, 
+          out_model_path = "/home/wentaoy4/lgm/opt_models/my_opt1.pt"):
     
+    logger = get_logger('../data/log/squad_val_1.log')
+    # model = model.to(device)
+    model.train()
+    optimizer = AdamW(model.parameters(),lr = lr)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps,num_training_steps=-1)
+    loss = -1
+    batch_count_tot = 1
+    logger.info("Start Training !")
+    for epoch in range(epochs):
+        logger.info(f"Training epoch {epoch}, Loss: {loss}")
+        for idx, data in enumerate(dataloader):
+            _data = data['input_ids'][0].to(device)
+            input_tensor = _data
+            label = _data
+            outputs = model(input_tensor,labels = label)
+            loss = outputs.loss
+            # loss = torch.mean(loss)
+            loss.backward()
+
+            if(batch_count_tot % batch_size == 0):
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+                model.zero_grad()
+                print(loss)
+                torch.save(
+                    model.state_dict(),
+                    out_model_path,
+                )
+
+            batch_count_tot += 1 
+            input_tensor = None
+            label = None 
+            _data = None  
+            outputs = None 
+            loss = loss.detach()
+        torch.save(
+                model.state_dict(),
+                out_model_path,
+                )
+    
+    logger.info("Finish Training !")
+    return model 
+
 def _multi_gpu_train(dataloader, 
           model,
           device = torch.device("cuda:0"),
@@ -163,7 +215,20 @@ def main_multi_gpu_train():
           lr = 1e-4, 
           batch_loop = 2, 
           out_model_path = "../data/weight_data/temp.pt")
+    
+def main_single_gpu_train():
+    device = torch.device("cuda:0")
+    dataset = load_from_disk("../data/convert_dataset/squad_val_cqa_dataset")  # to reload the dataset
+    dataset.set_format(type = 'torch',columns=['input_ids'])
+    train_loader = DataLoader(dataset,batch_size= 1,shuffle = True)
+    config_path = '/raid/projects/wentaoy4/model_file/models--facebook--opt-1.3b/snapshots/c8fd4232a5df1e87e06d5cbb9e066c5a114cd4ee'
+    opt_model = OPTForCausalLM.from_pretrained(config_path).to(device)
 
+    cp = torch.load("../data/weight_data/squad_val_cqa1.pt")
+    opt_model.load_state_dict(cp)   
+
+    _single_gpu_train(dataloader= train_loader,lr = 1e-5,device = device,batch_size = 512,model = opt_model,epochs= 20,out_model_path = "../data/weight_data/squad_val_cqa2.pt")
     
 if __name__ == "__main__":
-    main_multi_gpu_train()
+    # main_multi_gpu_train()
+    main_single_gpu_train()
