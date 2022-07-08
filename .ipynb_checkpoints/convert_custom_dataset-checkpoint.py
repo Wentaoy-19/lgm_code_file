@@ -4,7 +4,13 @@ from sre_parse import Tokenizer
 from typing import List
 from datasets import load_dataset,load_from_disk
 from transformers import GPT2Tokenizer 
+from huggingface_hub import snapshot_download
+
 tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-1.3b")
+
+def download_model(checkpoint ='facebook/opt-13b', cache_dir ):
+    # checkpoint = 'facebook/opt-13b'
+    weights_path = snapshot_download(checkpoint,cache_dir = cache_dir)
 
 def convert_csv(txt_path,csv_file):
     text_file_list = os.listdir(txt_path)
