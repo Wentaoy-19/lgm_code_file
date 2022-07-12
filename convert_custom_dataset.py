@@ -5,10 +5,11 @@ from typing import List
 from datasets import load_dataset,load_from_disk
 from transformers import GPT2Tokenizer 
 from huggingface_hub import snapshot_download
+import json
 
 tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-1.3b")
 
-def download_model(checkpoint ='facebook/opt-13b', cache_dir ):
+def download_model(checkpoint ='facebook/opt-13b', cache_dir = "./"):
     # checkpoint = 'facebook/opt-13b'
     weights_path = snapshot_download(checkpoint,cache_dir = cache_dir)
 
@@ -70,6 +71,19 @@ def split_text(text: str, n=100, character=" ") -> List[str]:
     text = text.split(character)
     return [character.join(text[i : i + n]).strip() for i in range(0, len(text), n)]
 
+def split_documents_2(documents: dict) -> dict:
+    """Split documents into passages"""
+    total_data = []
+    # titles, texts = [], []
+    for title, text in zip(documents["title"], documents["text"]):
+        if text is not None:
+            for passage in split_text(text):
+                temp_dic = {'title': title if title is not None else "", 'text': passage}
+                total_data.append(temp_dic)
+                # titles.append(title if title is not None else "")
+                # texts.append(passage)
+    return {"data": total_data}
+
 def split_documents(documents:dict):
     """Split documents into passages"""
     titles, texts, input_ids = [], [], []
@@ -110,6 +124,15 @@ def csv_to_dataset(csv_path ="/home/wentaoy4/lgm/squad_val_qa.csv",saved_path = 
     )
     dataset = test_dataset.map(split_documents, batched=True,batch_size = 16, num_proc=1)
     dataset.save_to_disk(saved_path)
+
+def csv_to_json(csv_path="/home/wentaoy4/lgm/ece120.csv" , saved_path = "/home/wentaoy4/lgm/data/json_data/ece120_note.json"):
+    csv_dataset = load_dataset(
+            "csv", data_files=csv_path, split="train", delimiter="$", column_names=["title", "text"]
+    )  
+    json_data = split_documents_2(csv_dataset)
+    with open(saved_path,"w") as outfile:
+        json.dump(json_data,outfile)
+
 
 if __name__ =="__main__":
     # squad_dataset = load_dataset("squad")
